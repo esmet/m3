@@ -502,25 +502,18 @@ func (d *db) Options() Options {
 }
 
 func (d *db) AssignShardSet(shardSet sharding.ShardSet) {
-	// NB: Can hold lock since all long running tasks are enqueued to run
-	// async while holding the lock.
 	d.Lock()
-	defer d.Unlock()
 
 	receivedNewShards := d.hasReceivedNewShardsWithLock(shardSet)
 	if receivedNewShards {
 		d.lastReceivedNewShards = d.nowFn()
 	}
+	d.Unlock()
 
-	if d.bootstraps == 0 || !d.mediatorIsOpenWithLock() {
+	if !d.mediator.IsOpen() {
 		// If not bootstrapped before or mediator is not open then can just
 		// immediately assign shards.
-		d.assignShardsWithLock(shardSet)
-		if d.bootstraps > 0 {
-			// If already bootstrapped before, enqueue another
-			// bootstrap (asynchronously, ok to trigger holding lock).
-			d.enqueueBootstrapAsync()
-		}
+		d.assignShardSet(shardSet)
 		return
 	}
 
